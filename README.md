@@ -92,3 +92,24 @@ Exit codes:
 - `3`: CLI usage/path error.
 
 CLI JSON output contains manifest/index/tensor metadata only, never token-level route arrays.
+
+## Runtime facade
+
+Reference HF workflows can use the lightweight runtime facade:
+
+```python
+from routeforge import MoeReplayRuntime, ReplayMode
+
+runtime = MoeReplayRuntime(
+    mode=ReplayMode.RECORD,
+    backend="hf_qwen3_moe",
+    tape_path="request_001.mrt",
+    tape_id="request_001",
+    model_id="qwen3-moe-reference",
+)
+
+with runtime.attach(model) as adapter:
+    outputs = model.generate(**inputs)
+```
+
+The facade uses the adapter registry; core remains model-agnostic.
