@@ -2,7 +2,8 @@
 
 ## Status
 
-Draft boundary, not implemented.
+Draft boundary. A non-executing `DeepEPDispatcherAdapter` stub exists; actual
+dispatch construction is not implemented.
 
 ## Positioning
 

@@ -2,7 +2,7 @@
 
 ## Status
 
-Draft boundary, R3 not enabled in MVP.
+Draft boundary. Schema validation exists; R3 replay remains disabled/fail-closed.
 
 ## Separation of concerns
 
@@ -44,5 +44,6 @@ layout is invalid for the current topology.
 
 ## MVP behavior
 
-Requests for R3/R4/R5 are rejected by the central replay guard. Phase 1-4 code
-may define schemas but must not pretend dispatch replay is available.
+Requests for R3/R4/R5 are rejected by the central replay guard. Current code can
+validate `DispatchPlan` structure for adapter development, but must not pretend
+dispatch replay is available.

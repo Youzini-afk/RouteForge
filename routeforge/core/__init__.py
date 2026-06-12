@@ -2,7 +2,7 @@
 
 from .capabilities import BackendCapabilities, requires_dispatch, requires_weights
 from .context import RuntimeContext
-from .dispatch_plan import DispatchPlan
+from .dispatch_plan import DispatchPlan, DispatchPlanValidationResult, validate_dispatch_plan
 from .enums import ReplayDecision, ReplayLevel, ReplayMode, RoutePhase
 from .errors import (
     CompatibilityError,
@@ -30,6 +30,7 @@ __all__ = [
     "BackendCapabilities",
     "CompatibilityError",
     "DispatchPlan",
+    "DispatchPlanValidationResult",
     "ExpertNamespace",
     "NumExpertsError",
     "ReplayDecision",
@@ -56,6 +57,7 @@ __all__ = [
     "requires_dispatch",
     "requires_weights",
     "validate_compatibility",
+    "validate_dispatch_plan",
     "validate_record",
     "validate_replay_request",
 ]

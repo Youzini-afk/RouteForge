@@ -113,3 +113,11 @@ with runtime.attach(model) as adapter:
 ```
 
 The facade uses the adapter registry; core remains model-agnostic.
+
+## Conformance and disabled backends
+
+RouteForge includes conformance tests and a capability matrix in
+`docs/testing-matrix.md`. R3 DispatchPlan, DeepEP, serving-runtime hooks,
+shared-expert replay, R4 handle replay, and R5 planned replay are either schema
+stubs or RFC boundaries today. They deliberately fail closed until their runtime
+alignment/topology checks are implemented.

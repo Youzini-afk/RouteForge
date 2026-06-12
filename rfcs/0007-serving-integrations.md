@@ -2,7 +2,8 @@
 
 ## Status
 
-Draft boundary, not implemented.
+Draft boundary. `ServingTokenBatch` can build `RuntimeContext`; no real vLLM or
+SGLang engine hook is implemented.
 
 ## Integration principle
 
