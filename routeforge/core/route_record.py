@@ -53,6 +53,7 @@ class RouteRecord:
     num_experts: int
     top_k: int
     token_count: int
+    record_id: str = "rec_0"
     replay_level: ReplayLevel = ReplayLevel.R2
     abi_version: str = "routeforge.route_abi.v0"
     phase: str | RoutePhase = RoutePhase.DECODE
@@ -79,6 +80,7 @@ class RouteRecord:
             num_experts=self.num_experts,
             top_k=self.top_k,
             token_count=self.token_count,
+            record_id=self.record_id,
             replay_level=ReplayLevel.R1,
             abi_version=self.abi_version,
             phase=self.phase,
@@ -107,6 +109,7 @@ class RouteRecord:
             and self.num_experts == other.num_experts
             and self.top_k == other.top_k
             and self.token_count == other.token_count
+            and self.record_id == other.record_id
             and self.replay_level == other.replay_level
             and self.weight_semantics == other.weight_semantics
             and self.expert_namespace == other.expert_namespace
@@ -129,6 +132,7 @@ class RouteRecord:
                 self.num_experts,
                 self.top_k,
                 self.token_count,
+                self.record_id,
                 self.replay_level,
                 self.weight_semantics,
                 self.expert_namespace,
