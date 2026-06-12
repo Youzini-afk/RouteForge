@@ -129,6 +129,104 @@ class RouteTapeReader:
     def record_ids(self) -> list[str]:
         return list(self._index["records"].keys())
 
+    def manifest_dict(self) -> dict[str, Any]:
+        """Return JSON-safe manifest metadata."""
+
+        return self.manifest.to_dict()
+
+    def list_records(self) -> list[dict[str, Any]]:
+        """Return JSON-safe record summaries without loading tensor payloads."""
+
+        return [self.record_summary(record_id) for record_id in self.record_ids()]
+
+    def record_summary(self, record_id: str) -> dict[str, Any]:
+        """Return one JSON-safe record summary from the tape index."""
+
+        records = self._index.get("records", {})
+        if record_id not in records:
+            raise RouteTapeError(f"RouteRecord id not found: {record_id}")
+        entry = dict(records[record_id])
+        return {
+            "record_id": record_id,
+            "layer_id": entry.get("layer_id"),
+            "replay_level": entry.get("replay_level"),
+            "token_count": entry.get("token_count"),
+            "top_k": entry.get("top_k"),
+            "num_experts": entry.get("num_experts"),
+            "phase": entry.get("phase"),
+            "step_id": entry.get("step_id"),
+            "chunk": entry.get("chunk"),
+            "checksum": entry.get("checksum"),
+            "tensors": entry.get("tensors", {}),
+            "weight_semantics": entry.get("weight_semantics", {}),
+            "expert_namespace": entry.get("expert_namespace", {}),
+            "metadata": entry.get("metadata", {}),
+        }
+
+    def validate_record_integrity(self, record_id: str) -> dict[str, Any]:
+        """Validate checksum and tensor metadata for one record.
+
+        This is an operator-facing structural check. It does not perform replay
+        compatibility; callers can pass the loaded record through replay_guard.
+        """
+
+        records = self._index.get("records", {})
+        if record_id not in records:
+            raise RouteTapeError(f"RouteRecord id not found: {record_id}")
+        entry = records[record_id]
+        chunk_path = self.tape_dir / entry["chunk"]
+        result: dict[str, Any] = {
+            "record_id": record_id,
+            "chunk_exists": chunk_path.is_file(),
+            "checksum_ok": None,
+            "checksum_expected": entry.get("checksum"),
+            "checksum_actual": None,
+            "tensor_shapes_ok": None,
+            "tensor_dtypes_ok": None,
+            "status": "pass",
+            "message": None,
+        }
+        if not chunk_path.is_file():
+            result.update(status="fail", message=f"RouteTape chunk missing: {chunk_path}")
+            return result
+
+        expected_checksum = entry.get("checksum")
+        actual_checksum = _sha256(chunk_path)
+        result["checksum_actual"] = actual_checksum
+        if expected_checksum:
+            result["checksum_ok"] = actual_checksum == expected_checksum
+            if not result["checksum_ok"]:
+                result.update(status="fail", message="RouteTape chunk checksum mismatch")
+                return result
+
+        try:
+            with np.load(chunk_path, allow_pickle=False) as payload:
+                tensor_names = set(payload.files)
+                shape_ok = True
+                dtype_ok = True
+                for name, meta in entry.get("tensors", {}).items():
+                    if name not in tensor_names:
+                        shape_ok = False
+                        dtype_ok = False
+                        continue
+                    value = payload[name]
+                    if list(tensor_shape(value)) != meta.get("shape"):
+                        shape_ok = False
+                    if tensor_dtype_name(value) != meta.get("dtype"):
+                        dtype_ok = False
+                result["tensor_shapes_ok"] = shape_ok
+                result["tensor_dtypes_ok"] = dtype_ok
+                if not shape_ok or not dtype_ok:
+                    result.update(status="fail", message="RouteTape tensor metadata mismatch")
+        except Exception as exc:
+            result.update(
+                status="fail",
+                tensor_shapes_ok=False,
+                tensor_dtypes_ok=False,
+                message=f"failed to read RouteTape chunk: {exc}",
+            )
+        return result
+
     def read_record(self, record_id: str) -> RouteRecord:
         records = self._index.get("records", {})
         if record_id not in records:

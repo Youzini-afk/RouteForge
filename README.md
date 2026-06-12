@@ -74,3 +74,21 @@ Unsupported or ambiguous cases must return a reasoned fallback decision or raise
 - `output_router_logits` is diagnostic-only and is not rewritten during replay.
 - Shared expert replay, DeepEP R3 dispatch replay, R4 handle replay, and R5 planned replay are intentionally disabled until their RFC validation requirements are implemented.
 - RouteTape v0 uses binary tensor chunks and integrity checks. The long-term production format target is safetensors plus richer checksums/manifest compatibility metadata.
+
+## RouteTape CLI
+
+RouteForge includes an operator-facing tape CLI:
+
+```bash
+python -m routeforge tape inspect /path/to/request.mrt --json
+python -m routeforge tape validate /path/to/request.mrt --json
+```
+
+Exit codes:
+
+- `0`: tape is readable/valid;
+- `1`: tape is missing/corrupt/unreadable;
+- `2`: tape is readable but integrity or replay-guard validation failed;
+- `3`: CLI usage/path error.
+
+CLI JSON output contains manifest/index/tensor metadata only, never token-level route arrays.
