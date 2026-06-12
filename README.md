@@ -57,3 +57,10 @@ Replay is correctness-sensitive. RouteForge defaults to **fail closed**:
 - no R3/R4 replay when topology or backend versions drift.
 
 Unsupported or ambiguous cases must return a reasoned fallback decision or raise a typed validation error.
+
+## Current implementation status
+
+- Core Route ABI dataclasses and fail-closed validation are implemented.
+- RouteTape v0 writes binary tensor chunks with JSON metadata sidecars.
+- HF Qwen3MoE reference adapter records/replays the Python sparse block boundary: gate output (`topk_idx`, `topk_weights`) before expert dispatch.
+- R3+ dispatch replay, shared expert replay, vLLM/SGLang integrations, and DeepEP handle replay are design-reserved but not enabled.
