@@ -19,10 +19,11 @@ class DeepEPDispatcherAdapter(DispatcherAdapter):
     def capabilities(self) -> BackendCapabilities:
         return BackendCapabilities(
             backend_id=self.backend_id,
-            supported_replay_levels=frozenset({ReplayLevel.R3}),
+            supported_replay_levels=frozenset(),
             supports_index_replay=True,
             supports_weight_replay=True,
-            supports_dispatch_plan=True,
+            supports_dispatch_plan=False,
+            unsafe_cases=("deepep_dispatch_plan_construction_disabled",),
         )
 
     def build_dispatch_plan(self, record: RouteRecord, context: RuntimeContext) -> DispatchPlan:

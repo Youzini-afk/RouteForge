@@ -91,7 +91,7 @@ Exit codes:
 - `2`: tape is readable but integrity or replay-guard validation failed;
 - `3`: CLI usage/path error.
 
-CLI JSON output contains manifest/index/tensor metadata only, never token-level route arrays.
+CLI JSON output contains manifest/index/tensor metadata only, never token-level route arrays. Arbitrary user-provided `metadata` is redacted by default; use `--show-metadata` only for trusted tapes.
 
 ## Runtime facade
 

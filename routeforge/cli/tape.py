@@ -33,12 +33,14 @@ def add_tape_subparser(subparsers: argparse._SubParsersAction) -> None:
     inspect.add_argument("tape_dir")
     inspect.add_argument("--json", action="store_true", dest="json_output")
     inspect.add_argument("--record", dest="record_id")
+    inspect.add_argument("--show-metadata", action="store_true", dest="show_metadata")
     inspect.set_defaults(func=cmd_inspect)
 
     validate = tape_sub.add_parser("validate", help="Validate RouteTape integrity")
     validate.add_argument("tape_dir")
     validate.add_argument("--json", action="store_true", dest="json_output")
     validate.add_argument("--record", dest="record_id")
+    validate.add_argument("--show-metadata", action="store_true", dest="show_metadata")
     validate.set_defaults(func=cmd_validate)
 
 
@@ -49,7 +51,7 @@ def cmd_inspect(args: argparse.Namespace) -> int:
         return EXIT_USAGE
     try:
         reader = RouteTapeReader(tape_dir)
-        output = _inspect_output(tape_dir, reader, args.record_id)
+        output = _inspect_output(tape_dir, reader, args.record_id, args.show_metadata)
     except RouteTapeError as exc:
         _emit_error(args, str(exc))
         return EXIT_CORRUPT
@@ -64,7 +66,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         return EXIT_USAGE
     try:
         reader = RouteTapeReader(tape_dir)
-        output = _validate_output(tape_dir, reader, args.record_id)
+        output = _validate_output(tape_dir, reader, args.record_id, args.show_metadata)
     except RouteTapeError as exc:
         _emit_error(args, str(exc))
         return EXIT_CORRUPT
@@ -72,17 +74,28 @@ def cmd_validate(args: argparse.Namespace) -> int:
     return EXIT_OK if output["status"] == "ok" else EXIT_GUARD_FAIL
 
 
-def _inspect_output(tape_dir: Path, reader: RouteTapeReader, record_id: str | None) -> dict[str, Any]:
-    records = [reader.record_summary(record_id)] if record_id else reader.list_records()
+def _inspect_output(
+    tape_dir: Path,
+    reader: RouteTapeReader,
+    record_id: str | None,
+    include_metadata: bool = False,
+) -> dict[str, Any]:
+    records = [reader.record_summary(record_id, include_metadata=include_metadata)] if record_id else reader.list_records(include_metadata=include_metadata)
     return {
         "status": "ok",
         "tape_dir": str(tape_dir),
-        "manifest": reader.manifest_dict(),
+        "manifest": reader.manifest_dict(include_metadata=include_metadata),
         "records": records,
+        "metadata_redacted": not include_metadata,
     }
 
 
-def _validate_output(tape_dir: Path, reader: RouteTapeReader, record_id: str | None) -> dict[str, Any]:
+def _validate_output(
+    tape_dir: Path,
+    reader: RouteTapeReader,
+    record_id: str | None,
+    include_metadata: bool = False,
+) -> dict[str, Any]:
     record_ids = [record_id] if record_id else reader.record_ids()
     caps = _default_capabilities(reader)
     policy = ReplayPolicy(require_token_identity=False)
@@ -98,7 +111,7 @@ def _validate_output(tape_dir: Path, reader: RouteTapeReader, record_id: str | N
             failures += 1
             continue
         item = dict(integrity)
-        item.update(reader.record_summary(rid))
+        item.update(reader.record_summary(rid, include_metadata=include_metadata))
         if integrity["status"] == "pass":
             try:
                 record = reader.read_record(rid)
@@ -127,7 +140,9 @@ def _validate_output(tape_dir: Path, reader: RouteTapeReader, record_id: str | N
     return {
         "status": "ok" if failures == 0 else "fail",
         "tape_dir": str(tape_dir),
-        "manifest": reader.manifest_dict(),
+        "manifest": reader.manifest_dict(include_metadata=include_metadata),
+        "metadata_redacted": not include_metadata,
+        "token_identity_check": "skipped_cli_integrity_mode",
         "checks": {
             "manifest_loadable": True,
             "index_loadable": True,
@@ -213,7 +228,10 @@ def _human_inspect(payload: dict[str, Any]) -> str:
 
 
 def _human_validate(payload: dict[str, Any]) -> str:
-    lines = [f"VALIDATING  {payload['tape_dir']}"]
+    lines = [
+        f"VALIDATING  {payload['tape_dir']}",
+        f"token_identity_check: {payload.get('token_identity_check', 'unknown')}",
+    ]
     for rec in payload["records"]:
         marker = "PASS" if rec.get("status") == "pass" else "FAIL"
         reason = rec.get("guard_reason_code") or rec.get("message") or "ok"

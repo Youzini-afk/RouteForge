@@ -43,6 +43,7 @@ def test_dispatch_plan_shape_mismatch_fails() -> None:
 def test_deepep_dispatcher_is_stub_and_fails_closed() -> None:
     adapter = DeepEPDispatcherAdapter()
     assert isinstance(adapter, DispatcherAdapter)
-    assert adapter.capabilities().supports_dispatch_plan
+    assert not adapter.capabilities().supports_dispatch_plan
+    assert adapter.capabilities().supported_replay_levels == frozenset()
     with pytest.raises(NotImplementedError):
         adapter.build_dispatch_plan(None, None)  # type: ignore[arg-type]

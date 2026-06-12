@@ -42,12 +42,14 @@ class MoeReplayRuntime:
         self,
         *,
         mode: ReplayMode | str = ReplayMode.OFF,
-        backend: str = "hf_qwen3_moe",
+        backend: str | None = None,
         tape_path: str | Path | None = None,
         tape_id: str = "routeforge_tape",
         model_id: str = "unknown",
     ) -> None:
         self.mode = ReplayMode(mode)
+        if backend is None:
+            raise ValueError("backend must be explicit, e.g. 'hf_qwen3_moe'")
         self.backend = backend
         self.tape_path = Path(tape_path) if tape_path is not None else None
         self.tape_id = tape_id

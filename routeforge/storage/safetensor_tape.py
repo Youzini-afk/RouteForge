@@ -129,23 +129,27 @@ class RouteTapeReader:
     def record_ids(self) -> list[str]:
         return list(self._index["records"].keys())
 
-    def manifest_dict(self) -> dict[str, Any]:
+    def manifest_dict(self, *, include_metadata: bool = False) -> dict[str, Any]:
         """Return JSON-safe manifest metadata."""
 
-        return self.manifest.to_dict()
+        data = self.manifest.to_dict()
+        if not include_metadata:
+            data["metadata"] = {"redacted": True, "key_count": len(self.manifest.metadata)}
+        return data
 
-    def list_records(self) -> list[dict[str, Any]]:
+    def list_records(self, *, include_metadata: bool = False) -> list[dict[str, Any]]:
         """Return JSON-safe record summaries without loading tensor payloads."""
 
-        return [self.record_summary(record_id) for record_id in self.record_ids()]
+        return [self.record_summary(record_id, include_metadata=include_metadata) for record_id in self.record_ids()]
 
-    def record_summary(self, record_id: str) -> dict[str, Any]:
+    def record_summary(self, record_id: str, *, include_metadata: bool = False) -> dict[str, Any]:
         """Return one JSON-safe record summary from the tape index."""
 
         records = self._index.get("records", {})
         if record_id not in records:
             raise RouteTapeError(f"RouteRecord id not found: {record_id}")
         entry = dict(records[record_id])
+        metadata = entry.get("metadata", {})
         return {
             "record_id": record_id,
             "layer_id": entry.get("layer_id"),
@@ -160,7 +164,7 @@ class RouteTapeReader:
             "tensors": entry.get("tensors", {}),
             "weight_semantics": entry.get("weight_semantics", {}),
             "expert_namespace": entry.get("expert_namespace", {}),
-            "metadata": entry.get("metadata", {}),
+            "metadata": metadata if include_metadata else {"redacted": True, "key_count": len(metadata)},
         }
 
     def validate_record_integrity(self, record_id: str) -> dict[str, Any]:

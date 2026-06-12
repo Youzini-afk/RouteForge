@@ -62,6 +62,15 @@ def test_runtime_record_context_manager_writes_tape(tmp_path) -> None:
     assert (tmp_path / "index.json").is_file()
 
 
+def test_runtime_requires_explicit_backend(tmp_path) -> None:
+    try:
+        MoeReplayRuntime(mode=ReplayMode.RECORD, tape_path=tmp_path)
+    except ValueError as exc:
+        assert "backend must be explicit" in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("runtime accepted implicit backend")
+
+
 def test_runtime_replay_loads_records_from_tape(tmp_path) -> None:
     model = _make_fake_model(moe_layer_ids=[1])
     recorder = MoeReplayRuntime(
