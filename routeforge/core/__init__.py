@@ -16,7 +16,13 @@ from .errors import (
     WeightSemanticsError,
 )
 from .replay_policy import ReplayPolicy, apply_policy
-from .replay_guard import ReplayDecisionResult, decide_replay_request, validate_replay_request
+from .replay_guard import (
+    ReplayDecisionResult,
+    TapeCompatibility,
+    decide_replay_request,
+    validate_replay_request,
+)
+from .reason_codes import ReplayReasonCode
 from .route_record import ExpertNamespace, RouteRecord, SharedExpertRecord, WeightSemantics
 from .validation import ValidationResult, validate_compatibility, validate_record
 
@@ -32,12 +38,14 @@ __all__ = [
     "ReplayMode",
     "ReplayPolicy",
     "ReplayPolicyError",
+    "ReplayReasonCode",
     "RouteForgeError",
     "RoutePhase",
     "RouteRecord",
     "RuntimeContext",
     "ShapeMismatchError",
     "SharedExpertRecord",
+    "TapeCompatibility",
     "TopKMismatchError",
     "UnsupportedReplayLevelError",
     "ValidationError",

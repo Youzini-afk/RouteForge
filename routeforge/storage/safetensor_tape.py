@@ -93,6 +93,12 @@ class RouteTapeWriter:
             version=TAPE_VERSION,
             abi_version=self.abi_version,
             backend_id=self.backend_id,
+            backend_version=self.metadata.get("backend_version"),
+            model_arch=self.metadata.get("model_arch"),
+            model_config_digest=self.metadata.get("model_config_digest"),
+            recorded_replay_levels=tuple(
+                sorted({entry["replay_level"] for entry in self._records.values()})
+            ),
             metadata=self.metadata,
         )
         _write_json(self.tape_dir / "manifest.json", manifest.to_dict())

@@ -19,6 +19,10 @@ class RouteTapeManifest:
     version: str = TAPE_VERSION
     abi_version: str = "routeforge.route_abi.v0"
     backend_id: str | None = None
+    backend_version: str | None = None
+    model_arch: str | None = None
+    model_config_digest: str | None = None
+    recorded_replay_levels: tuple[str, ...] = ()
     created_by: str = "routeforge"
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -28,4 +32,7 @@ class RouteTapeManifest:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "RouteTapeManifest":
         allowed = set(cls.__dataclass_fields__)  # type: ignore[attr-defined]
-        return cls(**{key: value for key, value in data.items() if key in allowed})
+        cleaned = {key: value for key, value in data.items() if key in allowed}
+        if "recorded_replay_levels" in cleaned:
+            cleaned["recorded_replay_levels"] = tuple(cleaned["recorded_replay_levels"] or ())
+        return cls(**cleaned)

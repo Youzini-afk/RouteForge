@@ -8,6 +8,7 @@ from .capabilities import requires_weights
 from .context import RuntimeContext
 from .errors import ReplayPolicyError, UnsupportedReplayLevelError
 from .enums import ReplayLevel
+from .reason_codes import ReplayReasonCode
 from .route_record import RouteRecord
 from .validation import validate_compatibility, validate_record, validate_tensor_dtypes
 
@@ -46,18 +47,23 @@ def apply_policy(policy: ReplayPolicy, record: RouteRecord, context: RuntimeCont
     if record.token_count != context.token_count and not policy.allow_partial:
         raise ReplayPolicyError(
             f"partial replay disabled: token_count mismatch record={record.token_count}, "
-            f"context={context.token_count}"
+            f"context={context.token_count}",
+            ReplayReasonCode.PARTIAL_REPLAY_DISABLED,
         )
 
     dtype_result = validate_tensor_dtypes(record, context)
     if not dtype_result.passed and not policy.allow_cast:
-        raise ReplayPolicyError(f"cast disabled: {dtype_result.reason}")
+        raise ReplayPolicyError(
+            f"cast disabled: {dtype_result.reason}",
+            dtype_result.code or ReplayReasonCode.CAST_DISABLED,
+        )
 
     working = record
     if _needs_downgrade(record, context):
         if not policy.allow_downgrade:
             raise ReplayPolicyError(
-                "downgrade disabled: context requires weighted replay but record cannot provide weights"
+                "downgrade disabled: context requires weighted replay but record cannot provide weights",
+                ReplayReasonCode.DOWNGRADE_DISABLED,
             )
         working = record.downgraded_to_r1()
         context = RuntimeContext(
@@ -90,11 +96,13 @@ def apply_policy(policy: ReplayPolicy, record: RouteRecord, context: RuntimeCont
 
     record_result = validate_record(working)
     if not record_result.passed:
-        raise ReplayPolicyError(record_result.reason or "record validation failed")
+        raise ReplayPolicyError(record_result.reason or "record validation failed", record_result.code)
 
     compatibility = validate_compatibility(working, context)
     if not compatibility.passed:
-        raise ReplayPolicyError(compatibility.reason or "compatibility validation failed")
+        raise ReplayPolicyError(
+            compatibility.reason or "compatibility validation failed", compatibility.code
+        )
 
     return working
 
