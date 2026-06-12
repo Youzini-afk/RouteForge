@@ -33,6 +33,7 @@ from routeforge.backends.base import BackendAdapter
 from routeforge.backends.hf_qwen3_moe import HFQwen3MoeAdapter
 from routeforge.core.capabilities import BackendCapabilities
 from routeforge.core.enums import ReplayLevel, ReplayMode
+from routeforge.core.errors import ReplayPolicyError
 from routeforge.core.route_record import RouteRecord
 
 
@@ -819,8 +820,12 @@ class TestReplayPath:
         assert calls_b[6] > 0 or calls_b[7] > 0
 
     def test_replay_r1_record_ignores_weights(self) -> None:
-        """Replaying an R1 record (index-only) should not use weights even
-        if the gate would normally produce them."""
+        """HF execution replay requires weights; R1 is rejected for this adapter.
+
+        RouteForge can represent R1 semantically, but this HF reference sparse
+        block requires weights to call experts safely. It must not silently use
+        uniform weights.
+        """
         model = _make_fake_model(moe_layer_ids=[1], num_experts=8, top_k=2, token_count=4)
         adapter = HFQwen3MoeAdapter(model)
 
@@ -842,11 +847,66 @@ class TestReplayPath:
         for expert in moe_block.experts:
             expert.calls.clear()
 
-        _ = moe_block.forward(hidden_states)
+        with pytest.raises((ReplayPolicyError, RuntimeError, ValueError)):
+            _ = moe_block.forward(hidden_states)
 
-        # Experts in the R1 indices should have been called
-        called_ids = {i for i in range(8) if moe_block.experts[i].calls}
-        assert called_ids == {0, 1, 2, 3, 4, 5, 6, 7}
+    def test_replay_token_count_mismatch_fails_closed(self) -> None:
+        """Adapter replay must pass through core validation, not blindly dispatch."""
+        model = _make_fake_model(moe_layer_ids=[1], num_experts=8, top_k=2, token_count=4)
+        adapter = HFQwen3MoeAdapter(model)
+        record = _make_r2_record(
+            token_count=2,
+            top_k=2,
+            num_experts=8,
+            layer_id=1,
+            topk_idx=np.array([[0, 1], [2, 3]], dtype=np.int16),
+            topk_weights=np.array([[0.6, 0.4], [0.7, 0.3]], dtype=np.float32),
+        )
+        adapter.set_mode(ReplayMode.REPLAY)
+        adapter.set_replay_record(layer_id=1, record=record)
+
+        hidden_states = np.zeros((4, 16), dtype=np.float32)
+        moe_block = _get_moe_block(model, 1)
+        with pytest.raises((ReplayPolicyError, RuntimeError, ValueError)):
+            _ = moe_block.forward(hidden_states)
+
+    def test_replay_top_k_mismatch_fails_closed(self) -> None:
+        model = _make_fake_model(moe_layer_ids=[1], num_experts=8, top_k=2, token_count=4)
+        adapter = HFQwen3MoeAdapter(model)
+        record = _make_r2_record(
+            token_count=4,
+            top_k=3,
+            num_experts=8,
+            layer_id=1,
+            topk_idx=np.array([[0, 1, 2]] * 4, dtype=np.int16),
+            topk_weights=np.array([[0.5, 0.3, 0.2]] * 4, dtype=np.float32),
+        )
+        adapter.set_mode(ReplayMode.REPLAY)
+        adapter.set_replay_record(layer_id=1, record=record)
+
+        hidden_states = np.zeros((4, 16), dtype=np.float32)
+        moe_block = _get_moe_block(model, 1)
+        with pytest.raises((ReplayPolicyError, RuntimeError, ValueError)):
+            _ = moe_block.forward(hidden_states)
+
+    def test_replay_num_experts_mismatch_fails_closed(self) -> None:
+        model = _make_fake_model(moe_layer_ids=[1], num_experts=8, top_k=2, token_count=4)
+        adapter = HFQwen3MoeAdapter(model)
+        record = _make_r2_record(
+            token_count=4,
+            top_k=2,
+            num_experts=4,
+            layer_id=1,
+            topk_idx=np.array([[0, 1], [2, 3], [0, 1], [2, 3]], dtype=np.int16),
+            topk_weights=np.array([[0.6, 0.4]] * 4, dtype=np.float32),
+        )
+        adapter.set_mode(ReplayMode.REPLAY)
+        adapter.set_replay_record(layer_id=1, record=record)
+
+        hidden_states = np.zeros((4, 16), dtype=np.float32)
+        moe_block = _get_moe_block(model, 1)
+        with pytest.raises((ReplayPolicyError, RuntimeError, ValueError)):
+            _ = moe_block.forward(hidden_states)
 
 
 # ============================================================================

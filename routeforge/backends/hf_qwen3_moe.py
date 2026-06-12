@@ -29,7 +29,10 @@ from typing import Any, Callable
 import numpy as np
 
 from routeforge.core.capabilities import BackendCapabilities
+from routeforge.core.context import RuntimeContext
 from routeforge.core.enums import ReplayLevel, ReplayMode
+from routeforge.core.replay_guard import validate_replay_request
+from routeforge.core.replay_policy import ReplayPolicy
 from routeforge.core.route_record import RouteRecord
 from routeforge.core.tensor import tensor_shape
 
@@ -61,6 +64,10 @@ class HFQwen3MoeAdapter(BackendAdapter):
         self._original_forwards: dict[int, Callable[..., Any]] = {}
         self._patched = False
         self._record_counter = 0
+        # HF Python reference adapter does not know serving request/token IDs.
+        # Therefore this adapter uses an explicit weak-alignment policy. Serving
+        # integrations must provide full RuntimeContext and should not copy this.
+        self._policy = ReplayPolicy(require_token_identity=False, allow_downgrade=False)
 
     def capabilities(self) -> BackendCapabilities:
         return BackendCapabilities(
@@ -164,10 +171,12 @@ class HFQwen3MoeAdapter(BackendAdapter):
             record = self._replay_records.get(ref.layer_id)
             if record is None:
                 raise RuntimeError(f"no replay RouteRecord configured for layer {ref.layer_id}")
-            topk_idx = record.topk_idx
-            topk_weights = record.topk_weights
+            context = _context_from_block(self.model, block, ref.layer_id, hidden_states, record)
+            safe_record = validate_replay_request(record, context, self._policy, self.capabilities())
+            topk_idx = safe_record.topk_idx
+            topk_weights = safe_record.topk_weights
             if topk_weights is None:
-                topk_weights = _uniform_weights(record.token_count, record.top_k, like=topk_idx)
+                raise RuntimeError("HF Qwen3MoE adapter requires weights for replay execution")
             return _call_experts(block, hidden_states, topk_idx, topk_weights)
 
         if self._mode == ReplayMode.RECORD:
@@ -281,14 +290,23 @@ def _infer_num_experts(model: Any, block: Any, topk_idx: Any) -> int:
     return int(idx.max()) + 1 if idx.size else 0
 
 
-def _uniform_weights(token_count: int, top_k: int, like: Any) -> Any:
-    value = 1.0 / float(top_k)
-    weights = np.full((token_count, top_k), value, dtype=np.float32)
-    try:
-        import torch  # type: ignore
-
-        if torch.is_tensor(like):
-            return torch.full((token_count, top_k), value, dtype=torch.float32, device=like.device)
-    except Exception:
-        pass
-    return weights
+def _context_from_block(
+    model: Any,
+    block: Any,
+    layer_id: int,
+    hidden_states: Any,
+    record: RouteRecord,
+) -> RuntimeContext:
+    token_count = int(tensor_shape(hidden_states)[0]) if tensor_shape(hidden_states) else record.token_count
+    return RuntimeContext(
+        token_count=token_count,
+        layer_id=layer_id,
+        top_k=getattr(getattr(model, "config", None), "num_experts_per_tok", record.top_k),
+        num_experts=_infer_num_experts(model, block, record.topk_idx),
+        replay_level=record.replay_level,
+        backend_id=HFQwen3MoeAdapter.backend_id,
+        phase=record.phase,
+        step_id=record.step_id,
+        weight_semantics=record.weight_semantics,
+        expert_namespace=record.expert_namespace,
+    )

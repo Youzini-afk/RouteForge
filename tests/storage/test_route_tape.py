@@ -625,6 +625,19 @@ class TestManifestMetadataIntegrity:
         manifest_data = json.loads((tmp_path / "manifest.json").read_text())
         assert manifest_data["num_records"] == 7
 
+    def test_manifest_num_records_mismatch_fails_closed(self, tmp_path: Path) -> None:
+        writer = RouteTapeWriter(tape_dir=tmp_path, tape_id="t", model_id="m")
+        writer.write_record(_make_r2_record())
+        writer.close()
+
+        manifest_path = tmp_path / "manifest.json"
+        manifest_data = json.loads(manifest_path.read_text())
+        manifest_data["num_records"] = 99
+        manifest_path.write_text(json.dumps(manifest_data))
+
+        with pytest.raises(RouteTapeError, match="num_records"):
+            RouteTapeReader(tape_dir=tmp_path)
+
     def test_manifest_version_is_set(self, tmp_path: Path) -> None:
         writer = RouteTapeWriter(tape_dir=tmp_path, tape_id="t", model_id="m")
         writer.close()
@@ -632,6 +645,30 @@ class TestManifestMetadataIntegrity:
         manifest_data = json.loads((tmp_path / "manifest.json").read_text())
         assert "version" in manifest_data
         assert manifest_data["version"]  # not empty
+
+    def test_valid_npz_wrong_shape_fails_closed(self, tmp_path: Path) -> None:
+        writer = RouteTapeWriter(tape_dir=tmp_path, tape_id="t", model_id="m")
+        writer.write_record(_make_r2_record(record_id="shape"))
+        writer.close()
+
+        chunks_dir = tmp_path / "chunks"
+        for chunk in chunks_dir.iterdir():
+            np.savez(
+                chunk,
+                topk_idx=np.zeros((1, 2), dtype=np.int16),
+                topk_weights=np.zeros((1, 2), dtype=np.float32),
+            )
+            # Restore checksum to make this test exercise shape validation, not checksum.
+            index_path = tmp_path / "index.json"
+            index = json.loads(index_path.read_text())
+            import hashlib
+
+            index["records"]["shape"]["checksum"] = hashlib.sha256(chunk.read_bytes()).hexdigest()
+            index_path.write_text(json.dumps(index))
+
+        reader = RouteTapeReader(tape_dir=tmp_path)
+        with pytest.raises(RouteTapeError, match="shape mismatch"):
+            reader.read_record("shape")
 
 
 # ============================================================================

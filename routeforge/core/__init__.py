@@ -16,6 +16,7 @@ from .errors import (
     WeightSemanticsError,
 )
 from .replay_policy import ReplayPolicy, apply_policy
+from .replay_guard import ReplayDecisionResult, decide_replay_request, validate_replay_request
 from .route_record import ExpertNamespace, RouteRecord, SharedExpertRecord, WeightSemantics
 from .validation import ValidationResult, validate_compatibility, validate_record
 
@@ -26,6 +27,7 @@ __all__ = [
     "ExpertNamespace",
     "NumExpertsError",
     "ReplayDecision",
+    "ReplayDecisionResult",
     "ReplayLevel",
     "ReplayMode",
     "ReplayPolicy",
@@ -42,8 +44,10 @@ __all__ = [
     "ValidationResult",
     "WeightSemantics",
     "apply_policy",
+    "decide_replay_request",
     "requires_dispatch",
     "requires_weights",
     "validate_compatibility",
     "validate_record",
+    "validate_replay_request",
 ]

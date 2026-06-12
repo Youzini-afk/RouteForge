@@ -64,3 +64,13 @@ Unsupported or ambiguous cases must return a reasoned fallback decision or raise
 - RouteTape v0 writes binary tensor chunks with JSON metadata sidecars.
 - HF Qwen3MoE reference adapter records/replays the Python sparse block boundary: gate output (`topk_idx`, `topk_weights`) before expert dispatch.
 - R3+ dispatch replay, shared expert replay, vLLM/SGLang integrations, and DeepEP handle replay are design-reserved but not enabled.
+
+## Current limitations
+
+- The HF Qwen3MoE adapter is a **reference Python adapter**, not a fused serving adapter.
+- It does not provide serving-grade token alignment by itself. Production replay must be driven by a `RuntimeContext` from a serving runtime that can prove request/sequence/token-position identity.
+- The adapter uses a documented weak-alignment policy only for local HF reference workflows.
+- R1 index-only replay is representable in the ABI, but HF sparse block execution requires route weights; the adapter rejects R1 execution instead of fabricating uniform weights.
+- `output_router_logits` is diagnostic-only and is not rewritten during replay.
+- Shared expert replay, DeepEP R3 dispatch replay, R4 handle replay, and R5 planned replay are intentionally disabled until their RFC validation requirements are implemented.
+- RouteTape v0 uses binary tensor chunks and integrity checks. The long-term production format target is safetensors plus richer checksums/manifest compatibility metadata.

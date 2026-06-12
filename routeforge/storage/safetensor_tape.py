@@ -8,6 +8,7 @@ dependency is not installed. Token-level route payload never goes into JSON.
 from __future__ import annotations
 
 import json
+import hashlib
 from pathlib import Path
 from typing import Any
 
@@ -79,6 +80,7 @@ class RouteTapeWriter:
             raise RouteTapeError(f"failed to write chunk {chunk_name}: {exc}") from exc
 
         self._records[record.record_id] = _record_index_entry(record, chunk_name, tensors)
+        self._records[record.record_id]["checksum"] = _sha256(chunk_path)
         return record.record_id
 
     def close(self) -> None:
@@ -106,6 +108,11 @@ class RouteTapeReader:
         self.chunks_dir = self.tape_dir / "chunks"
         self.manifest = self._load_manifest()
         self._index = self._load_index()
+        if self.manifest.num_records != len(self._index["records"]):
+            raise RouteTapeError(
+                f"manifest num_records={self.manifest.num_records} does not match "
+                f"index records={len(self._index['records'])}"
+            )
 
     def __enter__(self) -> "RouteTapeReader":
         return self
@@ -124,6 +131,9 @@ class RouteTapeReader:
         chunk_path = self.tape_dir / entry["chunk"]
         if not chunk_path.is_file():
             raise RouteTapeError(f"RouteTape chunk missing: {chunk_path}")
+        expected_checksum = entry.get("checksum")
+        if expected_checksum and _sha256(chunk_path) != expected_checksum:
+            raise RouteTapeError(f"RouteTape chunk checksum mismatch: {chunk_path}")
         try:
             with np.load(chunk_path, allow_pickle=False) as payload:
                 topk_idx = payload["topk_idx"].copy()
@@ -141,6 +151,10 @@ class RouteTapeReader:
                 }
         except Exception as exc:
             raise RouteTapeError(f"failed to read RouteTape chunk for {record_id}: {exc}") from exc
+
+        _validate_loaded_tensor(entry, "topk_idx", topk_idx)
+        if topk_weights is not None:
+            _validate_loaded_tensor(entry, "topk_weights", topk_weights)
 
         try:
             return RouteRecord(
@@ -228,6 +242,30 @@ def _record_index_entry(record: RouteRecord, chunk_name: str, tensors: dict[str,
 
 def _write_json(path: Path, data: dict[str, Any]) -> None:
     path.write_text(json.dumps(data, indent=2, sort_keys=True))
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _validate_loaded_tensor(entry: dict[str, Any], name: str, value: Any) -> None:
+    meta = entry.get("tensors", {}).get(name)
+    if not meta:
+        raise RouteTapeError(f"RouteTape index missing tensor metadata for {name}")
+    actual_shape = list(tensor_shape(value))
+    actual_dtype = tensor_dtype_name(value)
+    if actual_shape != meta.get("shape"):
+        raise RouteTapeError(
+            f"RouteTape tensor shape mismatch for {name}: expected {meta.get('shape')}, got {actual_shape}"
+        )
+    if actual_dtype != meta.get("dtype"):
+        raise RouteTapeError(
+            f"RouteTape tensor dtype mismatch for {name}: expected {meta.get('dtype')}, got {actual_dtype}"
+        )
 
 
 def _to_numpy(value: Any) -> np.ndarray:
